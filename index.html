@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI短剧 · 中日发行雷达</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Microsoft YaHei","PingFang SC",sans-serif; background:#f4f6fa; color:#1f2937; }
+  header { background:linear-gradient(135deg,#1e3a8a,#3b82f6); color:#fff; padding:20px 32px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  header h1 { font-size:20px; }
+  header .sub { font-size:12px; opacity:.85; margin-top:4px; }
+  main { max-width:1280px; margin:0 auto; padding:20px 24px 60px; }
+  .status-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  .chip { background:#fff; border:1px solid #e2e8f0; border-radius:20px; padding:5px 14px; font-size:12px; color:#475569; }
+  .section-title { font-size:16px; font-weight:700; margin:26px 0 12px; padding-left:10px; border-left:4px solid #3b82f6; }
+  .section-title.jp { border-left-color:#dc2626; }
+  table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.06); margin-bottom:8px; }
+  th { background:#f1f5f9; font-size:12px; color:#64748b; padding:9px 10px; text-align:left; white-space:nowrap; }
+  td { padding:9px 10px; font-size:13px; border-top:1px solid #f1f5f9; vertical-align:top; }
+  tr:hover td { background:#f8fafc; }
+  .t-title a { color:#1e40af; text-decoration:none; }
+  .t-title a:hover { text-decoration:underline; }
+  .t-author { font-size:11px; color:#94a3b8; margin-top:2px; }
+  .num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .up { color:#dc2626; font-size:11px; }
+  .down { color:#16a34a; font-size:11px; }
+  .score { display:inline-block; min-width:34px; text-align:center; padding:2px 8px; border-radius:12px; font-weight:700; font-size:12px; }
+  .s-S { background:#fee2e2; color:#b91c1c; }
+  .s-A { background:#ffedd5; color:#c2410c; }
+  .s-B { background:#fef9c3; color:#a16207; }
+  .s-C { background:#f1f5f9; color:#64748b; }
+  .empty { background:#fff; border:1px dashed #cbd5e1; border-radius:10px; padding:18px; font-size:13px; color:#94a3b8; text-align:center; }
+  .hint { font-size:11px; color:#94a3b8; margin:4px 0 14px; }
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { background:#e2e8f0; color:#1e40af; }
+  th.sort-active { color:#1e40af; background:#e8efff; }
+  .readonly-tag { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.4); border-radius:14px; padding:4px 12px; font-size:12px; }
+  #err { background:#fef2f2; color:#b91c1c; padding:14px; border-radius:10px; margin-top:20px; display:none; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎬 AI短剧 · 中日发行雷达</h1>
+    <div class="sub">国内热剧 → 日本潜力筛选 ｜ 日本平台流行题材追踪 ｜ 数据每小时自动更新 ｜ 互动质量分替代完播率</div>
+  </div>
+  <div>
+    <span id="clock" style="font-size:12px;opacity:.85;margin-right:14px;"></span>
+    <span class="readonly-tag">只读看板</span>
+  </div>
+</header>
+<main>
+  <div class="status-bar" id="statusBar"></div>
+  <div id="err">数据加载失败，可能是后台正在更新，请稍后刷新页面。</div>
+
+  <div class="section-title">🇨🇳 国内平台 · 具备日本发行潜力的AI短剧</div>
+  <div class="hint">点击表头（播放量 / 点赞 / 评论 / 互动质量分 / 日本潜力 / 更新）可升序↗或降序↘排序，再次点击切换方向。</div>
+  <div id="cn"></div>
+
+  <div class="section-title jp">🇯🇵 日本平台 · 当前流行的短剧与题材</div>
+  <div class="hint">用于反向参考：日本当下什么题材在火，反哺国内选题。</div>
+  <div id="jp"></div>
+</main>
+
+<script>
+const CN = ["bilibili","douyin","hongguo","xiaohongshu"];
+const JP = ["youtube_jp","tiktok_jp"];
+const NAMES = {bilibili:"B站",douyin:"抖音",hongguo:"红果",xiaohongshu:"小红书",youtube_jp:"YouTube(日本)",tiktok_jp:"TikTok(日本)"};
+const EMPTY_HINTS = {
+  douyin:"暂无监测条目（片单维护中）",
+  hongguo:"红果无网页公开数据，由管理员手工维护片单",
+  xiaohongshu:"小红书反爬严格，由管理员手工维护片单",
+  tiktok_jp:"暂无监测条目（片单维护中）"
+};
+
+function fmt(n){ if(n==null)return "-"; if(n>=1e8)return (n/1e8).toFixed(2)+"亿"; if(n>=1e4)return (n/1e4).toFixed(1)+"万"; return String(n); }
+function gradeClass(g){ return "s-"+(g||"C")[0]; }
+function deltaHtml(d){
+  if(!d) return "";
+  if(d>0) return `<div class="up">▲ +${fmt(d)}</div>`;
+  if(d<0) return `<div class="down">▼ ${fmt(d)}</div>`;
+  return "";
+}
+const COLS = [
+  {key:"title", label:"剧目", w:"38%"},
+  {key:"views", label:"播放量", sortable:true},
+  {key:"likes", label:"点赞", sortable:true},
+  {key:"comments", label:"评论", sortable:true},
+  {key:"engage_score", label:"互动质量分", sortable:true},
+  {key:"jp_score", label:"日本潜力", sortable:true},
+  {key:"fetched_at", label:"更新", sortable:true},
+];
+let sortCol="jp_score", sortDir="desc", LAST=null;
+
+function sortRows(rows){
+  const arr = rows.slice();
+  arr.sort((a,b)=>{
+    if(sortCol==="fetched_at"){
+      const va=a.fetched_at||"", vb=b.fetched_at||"";
+      const c = va<vb?-1:va>vb?1:0;
+      return sortDir==="desc" ? -c : c;
+    }
+    const va = (a[sortCol]==null?-Infinity:a[sortCol]);
+    const vb = (b[sortCol]==null?-Infinity:b[sortCol]);
+    return sortDir==="desc" ? (vb-va) : (va-vb);
+  });
+  return arr;
+}
+function renderTable(rows){
+  const sorted = sortRows(rows);
+  let h = `<table><tr>`;
+  for(const c of COLS){
+    if(c.sortable){
+      const active = sortCol===c.key;
+      const arrow = active ? (sortDir==="desc"?" ▼":" ▲") : " ↕";
+      h += `<th class="sortable${active?' sort-active':''}" style="${c.w?('width:'+c.w+';'):''}" onclick="setSort('${c.key}')">${c.label}${arrow}</th>`;
+    } else {
+      h += `<th style="${c.w?('width:'+c.w+';'):''}">${c.label}</th>`;
+    }
+  }
+  h += `</tr>`;
+  for(const r of sorted){
+    const t = r.fetched_at ? r.fetched_at.slice(5,16) : "-";
+    h += `<tr>
+      <td class="t-title"><a href="${r.url||'#'}" target="_blank">${esc(r.title)||'(无标题)'}</a>
+        <div class="t-author">${esc(r.author||'')}${r.manual?' ｜ 手工数据':''}</div></td>
+      <td class="num">${fmt(r.views)}${deltaHtml(r.views_delta)}</td>
+      <td class="num">${fmt(r.likes)}</td>
+      <td class="num">${fmt(r.comments)}</td>
+      <td class="num">${r.engage_score}</td>
+      <td><span class="score ${gradeClass(r.grade)}">${r.jp_score}</span><div class="t-author">${r.grade}</div></td>
+      <td class="num" style="font-size:11px;color:#94a3b8">${t}</td>
+    </tr>`;
+  }
+  return h+"</table>";
+}
+function setSort(key){ if(sortCol===key){ sortDir = sortDir==="desc"?"asc":"desc"; } else { sortCol=key; sortDir="desc"; } renderAll(); }
+function renderAll(){
+  if(!LAST) return;
+  const pf = LAST.platforms;
+  document.getElementById("cn").innerHTML = CN.map(p=>{
+    const rows = pf[p]||[];
+    return `<div style="margin-top:14px;font-weight:600;font-size:14px;">${NAMES[p]}</div>` +
+      (rows.length ? renderTable(rows) : `<div class="empty">${EMPTY_HINTS[p]||"暂无数据"}</div>`);
+  }).join("");
+  document.getElementById("jp").innerHTML = JP.map(p=>{
+    const rows = pf[p]||[];
+    return `<div style="margin-top:14px;font-weight:600;font-size:14px;">${NAMES[p]}</div>` +
+      (rows.length ? renderTable(rows) : `<div class="empty">${EMPTY_HINTS[p]||"暂无数据"}</div>`);
+  }).join("");
+}
+function esc(s){ return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function load(){
+  try{
+    const res = await fetch("data.json?t="+Date.now());
+    if(!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    document.getElementById("err").style.display="none";
+    document.getElementById("clock").textContent = "数据更新于 "+d.server_time;
+    let chips = "";
+    for(const [p,st] of Object.entries(d.status)){
+      chips += `<span class="chip">${NAMES[p]||p}:${st.count}条 ${st.last_run?st.last_run.slice(5,16):""}</span>`;
+    }
+    document.getElementById("statusBar").innerHTML = chips;
+    LAST = d;
+    renderAll();
+  }catch(e){
+    document.getElementById("err").style.display="block";
+  }
+}
+load();
+setInterval(load, 300000);
+</script>
+</body>
+</html>
