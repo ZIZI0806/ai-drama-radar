@@ -37,6 +37,12 @@
   th.sort-active { color:#1e40af; background:#e8efff; }
   .readonly-tag { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.4); border-radius:14px; padding:4px 12px; font-size:12px; }
   #err { background:#fef2f2; color:#b91c1c; padding:14px; border-radius:10px; margin-top:20px; display:none; }
+  /* 搜索框 */
+  .search-wrap { display:flex; align-items:center; gap:12px; margin:8px 0 4px; flex-wrap:wrap; }
+  #searchBox { flex:1; min-width:240px; max-width:560px; padding:10px 14px; font-size:14px; border:1px solid #cbd5e1; border-radius:10px; }
+  #searchBox:focus { outline:2px solid #93c5fd; border-color:#3b82f6; }
+  .search-count { font-size:12px; color:#64748b; }
+  .search-count a { text-decoration:none; }
 </style>
 </head>
 <body>
@@ -52,6 +58,10 @@
 </header>
 <main>
   <div class="status-bar" id="statusBar"></div>
+  <div class="search-wrap">
+    <input id="searchBox" type="search" placeholder="🔍 搜索剧名 / 作者 / 简介标签（跨全部平台）" oninput="onSearch()">
+    <span id="searchCount" class="search-count"></span>
+  </div>
   <div id="err">数据加载失败，可能是后台正在更新，请稍后刷新页面。</div>
 
   <div class="section-title">🇨🇳 国内平台 · 具备日本发行潜力的AI短剧</div>
@@ -91,7 +101,7 @@ const COLS = [
   {key:"jp_score", label:"日本潜力", sortable:true},
   {key:"fetched_at", label:"更新", sortable:true},
 ];
-let sortCol="jp_score", sortDir="desc", LAST=null;
+let sortCol="jp_score", sortDir="desc", LAST=null, SEARCH="";
 
 function sortRows(rows){
   const arr = rows.slice();
@@ -136,19 +146,41 @@ function renderTable(rows){
   return h+"</table>";
 }
 function setSort(key){ if(sortCol===key){ sortDir = sortDir==="desc"?"asc":"desc"; } else { sortCol=key; sortDir="desc"; } renderAll(); }
+function matchRow(r){
+  if(!SEARCH) return true;
+  const hay = [r.title, r.author, r.description, r.platform_name].join(" ").toLowerCase();
+  return hay.includes(SEARCH);
+}
+function onSearch(){
+  SEARCH = (document.getElementById("searchBox").value||"").trim().toLowerCase();
+  renderAll();
+}
+function clearSearch(){
+  const b = document.getElementById("searchBox");
+  if(b) b.value = "";
+  SEARCH = "";
+  renderAll();
+}
 function renderAll(){
   if(!LAST) return;
   const pf = LAST.platforms;
+  let total = 0;
   document.getElementById("cn").innerHTML = CN.map(p=>{
-    const rows = pf[p]||[];
+    const rows = (pf[p]||[]).filter(matchRow);
+    total += rows.length;
+    const emptyMsg = SEARCH ? "无匹配结果" : (EMPTY_HINTS[p]||"暂无数据");
     return `<div style="margin-top:14px;font-weight:600;font-size:14px;">${NAMES[p]}</div>` +
-      (rows.length ? renderTable(rows) : `<div class="empty">${EMPTY_HINTS[p]||"暂无数据"}</div>`);
+      (rows.length ? renderTable(rows) : `<div class="empty">${emptyMsg}</div>`);
   }).join("");
   document.getElementById("jp").innerHTML = JP.map(p=>{
-    const rows = pf[p]||[];
+    const rows = (pf[p]||[]).filter(matchRow);
+    total += rows.length;
+    const emptyMsg = SEARCH ? "无匹配结果" : (EMPTY_HINTS[p]||"暂无数据");
     return `<div style="margin-top:14px;font-weight:600;font-size:14px;">${NAMES[p]}</div>` +
-      (rows.length ? renderTable(rows) : `<div class="empty">${EMPTY_HINTS[p]||"暂无数据"}</div>`);
+      (rows.length ? renderTable(rows) : `<div class="empty">${emptyMsg}</div>`);
   }).join("");
+  const sc = document.getElementById("searchCount");
+  if(sc) sc.innerHTML = SEARCH ? `共找到 ${total} 部 <a href="javascript:void(0)" onclick="clearSearch()" style="margin-left:8px;">清除</a>` : "";
 }
 function esc(s){ return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
